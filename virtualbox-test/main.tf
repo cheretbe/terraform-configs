@@ -12,8 +12,8 @@ terraform {
 resource "virtualbox_vm" "node" {
   count     = 1
   name      = format("node-%02d", count.index + 1)
-  image     = "https://app.vagrantup.com/ubuntu/boxes/focal64/versions/20211026.0.0/providers/virtualbox.box"
-  # image     = "/mnt/data/temp/2del/download/virtualbox.box"
+  # image     = "https://app.vagrantup.com/ubuntu/boxes/focal64/versions/20211026.0.0/providers/virtualbox.box"
+  image     = "/mnt/data/temp/2del/download/virtualbox.box"
   cpus      = 2
   memory    = "1.0 gib"
   # user_data = file("${path.module}/user_data")
@@ -21,6 +21,10 @@ resource "virtualbox_vm" "node" {
   network_adapter {
     type           = "hostonly"
     host_interface = "vboxnet0"
+  }
+
+  network_adapter {
+    type           = "nat"
   }
 
   # network_adapter {
@@ -39,8 +43,7 @@ resource "virtualbox_vm" "node" {
 
   provisioner "remote-exec" {
     inline = [
-      "ip addr",
-      "sudo touch /root/aaabbbccc"
+      "/usr/bin/curl -s https://raw.githubusercontent.com/cheretbe/bootstrap/master/setup_venv.py?flush_cache=True | /usr/bin/python3 - ansible"
     ]
   }
 
@@ -52,6 +55,23 @@ resource "virtualbox_vm" "node" {
 
 output "IPAddr" {
   value = element(virtualbox_vm.node.*.network_adapter.0.ipv4_address, 1)
+}
+
+resource "null_resource" "provision" {
+    connection {
+      type     = "ssh"
+      user     = "vagrant"
+      # password = var.root_password
+      # host     = self.public_ip
+      host     = "${element(virtualbox_vm.node.*.network_adapter.0.ipv4_address, 0)}"
+      private_key = file("~/.vagrant.d/insecure_private_key")
+    }
+    provisioner "remote-exec" {
+      inline = ["uname -a"]
+    }
+  provisioner "remote-exec" {
+    script = "../docker-test/provision/ansible_test.sh"
+  }
 }
 
 # output "IPAddr_2" {
