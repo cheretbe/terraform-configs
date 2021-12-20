@@ -1,11 +1,16 @@
 ---
 - name: Provision test
   hosts: all
+  vars_files:
+    - vars_test.yml
 
   tasks:
     - name: Print host information
       debug:
         msg: "{{ ansible_fqdn }}: {{ ansible_distribution }} {{ ansible_distribution_version}}"
+
+    - debug:
+        var: tf_var2
 
     - name: Checkout shared playbooks repo
       git:
