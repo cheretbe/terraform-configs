@@ -4,7 +4,7 @@ set -euo pipefail
 
 apt-get update -y
 DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-  curl wget openssh-server
+  curl wget git openssh-server
 
 if ! id "vagrant" &>/dev/null; then
   # https://en.wikipedia.org/wiki/Gecos_field
