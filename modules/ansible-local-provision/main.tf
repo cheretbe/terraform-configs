@@ -2,7 +2,7 @@ locals {
   playbook_name = "/tmp/vagrant-provision/${basename(var.playbook)}"
 }
 
-resource "null_resource" "ansible-controller" {
+resource "null_resource" "ansible-local-provision" {
   connection {
     type        = "ssh"
     host        = var.connection.host
