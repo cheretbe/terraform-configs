@@ -105,12 +105,14 @@ module "ovpn_server_user" {
 module "ovpn_server_ansible" {
   source = "../modules/ansible-controller"
 
+  depends_on=[module.ovpn_server_user]
   connection = local.server_ssh_connection
 }
 
 module "ovpn_server_provision" {
   source = "../modules/ansible-local-provision"
 
+  depends_on=[module.ovpn_server_ansible]
   connection = local.server_ssh_connection
   playbook = "${path.module}/provision/server_provision.yml"
   extra_vars = {
