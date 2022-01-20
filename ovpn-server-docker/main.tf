@@ -50,6 +50,10 @@ resource "docker_container" "ovpn_server" {
     "/run/lock" = "",
     "/tmp:exec" = ""
   }
+  devices { host_path = "/dev/net/tun" }
+  capabilities {
+    add = ["CAP_NET_ADMIN", "CAP_SYS_ADMIN"]
+  }
 }
 
 # resource "docker_container" "foo2" {
@@ -96,6 +100,25 @@ locals {
   }
 }
 
+# TODO: Add router_wan_if_mac_addr parameter to router Ansible role and
+#       use docker_container.ovpn_server.ip_address
+# This external datasource example should go to notes after that
+# https://registry.terraform.io/providers/hashicorp/external/latest/docs/data-sources/data_source
+# [!] Even though the doc for external datasource states that "program must then
+#     produce a valid JSON object on stdout", it actually supports only limited
+#     subset of JSON (no arrays etc.). That's why jq is used here
+#     See:
+#     https://github.com/hashicorp/terraform/issues/12249
+#     https://github.com/hashicorp/terraform/issues/12256
+data "external" "server_mac" {
+  depends_on=[module.ovpn_server_user]
+
+  program = [
+    "bash", "-c",
+    "docker inspect -f '{{json .NetworkSettings.Networks.terraform_ovpn_network}}' terraform-docker-ovpn-server | jq  -j '{mac_addr: .MacAddress}'"
+  ]
+}
+
 module "ovpn_server_user" {
   source = "../modules/vagrant-user"
 
@@ -109,6 +132,40 @@ module "ovpn_server_ansible" {
   connection = local.server_ssh_connection
 }
 
+
+resource "null_resource" "certificates" {
+  connection {
+    type        = "ssh"
+    host        = local.server_ssh_connection.host
+    user        = local.server_ssh_connection.user
+    private_key = local.server_ssh_connection.private_key
+  }
+
+  provisioner "remote-exec" {
+    inline = ["mkdir -p /home/vagrant/ansible-data"]
+  }
+
+  provisioner "file" {
+    source = "${path.module}/local/ca.crt"
+    destination = "/home/vagrant/ansible-data/ca.crt"
+  }
+
+  provisioner "file" {
+    source = "${path.module}/local/server.crt"
+    destination = "/home/vagrant/ansible-data/server.crt"
+  }
+
+  provisioner "file" {
+    source = "${path.module}/local/server.key"
+    destination = "/home/vagrant/ansible-data/server.key"
+  }
+
+  provisioner "file" {
+    source = "${path.module}/local/ta.key"
+    destination = "/home/vagrant/ansible-data/ta.key"
+  }
+}
+
 module "ovpn_server_provision" {
   source = "../modules/ansible-local-provision"
 
@@ -116,6 +173,13 @@ module "ovpn_server_provision" {
   connection = local.server_ssh_connection
   playbook = "${path.module}/provision/server_provision.yml"
   extra_vars = {
-    var1 = "dummy"
+    ovpn_server_ca_cert  = "/home/vagrant/ansible-data/ca.crt"
+    ovpn_server_cert     = "/home/vagrant/ansible-data/server.crt"
+    ovpn_server_key      = "/home/vagrant/ansible-data/server.key"
+    ovpn_server_ta_key   = "/home/vagrant/ansible-data/ta.key"
+    ovpn_server_dns_name = "vpn.example.com"
+    router_wan_if_mac_addr = "${data.external.server_mac.result.mac_addr}"
+    router_lan_if_name   = "tun0"
+    router_allow_wan_ssh = true
   }
 }
