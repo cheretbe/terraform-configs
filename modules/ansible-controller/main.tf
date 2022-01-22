@@ -6,6 +6,13 @@ resource "null_resource" "ansible-controller" {
     private_key = var.connection.private_key
   }
 
+  provisioner "remote-exec" {
+    inline = [
+      "sudo apt-get update -qq -y",
+      "sudo DEBIAN_FRONTEND=noninteractive apt-get install -qq -y --no-install-recommends curl wget git"
+    ]
+  }
+
   provisioner "file" {
     content = var.requirements
     destination = "/home/${var.connection.user}/requirements.txt"
