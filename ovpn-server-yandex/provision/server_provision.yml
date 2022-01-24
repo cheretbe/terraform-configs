@@ -1,14 +1,47 @@
 ---
+- name: OpenVPN server provision
+  hosts: all
+  tasks:
+    # https://api.cloudflare.com/#dns-records-for-a-zone-dns-record-details
+    # GET zones/:zone_identifier/dns_records/:identifier
+    - name: Get current DNS record info
+      ansible.builtin.uri:
+        url: "https://api.cloudflare.com/client/v4/zones/{{ cf_zone_id }}/dns_records/{{ cf_dns_record_id }}"
+        headers:
+          X-Auth-Email: "{{ cf_api_email }}"
+          X-Auth-Key: "{{ cf_api_key }}"
+          Content-Type: "application/json"
+      register: dns_record_info
+
+      # https://api.cloudflare.com/#dns-records-for-a-zone-update-dns-record
+      # PUT zones/:zone_identifier/dns_records/:identifier
+    - name: Update DNS record info
+      ansible.builtin.uri:
+        url: "https://api.cloudflare.com/client/v4/zones/{{ cf_zone_id }}/dns_records/{{ cf_dns_record_id }}"
+        method: PUT
+        body: >-
+          {
+            "type":    "A",
+            "name":    "{{ ovpn_server_dns_name }}",
+            "content": "{{ cf_dns_record_content }}",
+            "ttl":     60,
+            "proxied": false
+          }
+        body_format: json
+        headers:
+          X-Auth-Email: "{{ cf_api_email }}"
+          X-Auth-Key: "{{ cf_api_key }}"
+          Content-Type: "application/json"
+      when: dns_record_info.json.result.content != cf_dns_record_content
+      register: dns_record_update_result
+
+    - name: Check API call result
+      assert:
+        that: dns_record_update_result.json.success
+      when: not (dns_record_update_result.skipped | default(false))
+
 - name: Setup common parameters
   import_playbook: /opt/ansible-playbooks/linux_server_setup.yml
 
-- name: OpenVPN server provision
-  hosts: all
-
-  tasks:
-    - include_role: name="/opt/ansible-playbooks/ovpn-server"
-
-    - name: Update facts to make ansible_tun0 variable available
-      setup:
-
-    - include_role: name="/opt/ansible-playbooks/router"
+- name: Setup OpenVPN server
+  import_playbook: /opt/ansible-playbooks/ovpn_server_setup.yml

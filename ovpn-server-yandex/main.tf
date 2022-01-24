@@ -12,7 +12,10 @@ variable "yc_folder_id" {}
 variable "yc_zone" {}
 variable "public_key" {}
 variable "private_key" {}
-
+variable "cf_api_email" {}
+variable "cf_api_key" {}
+variable "cf_zone_id" {}
+variable "cf_dns_record_id" {}
 
 provider "yandex" {
   token     = var.yc_token
@@ -139,6 +142,11 @@ module "ovpn_server_provision" {
         port = 1194
         comment = "Allow VPN"
       }
-    ]
+    ],
+    cf_api_email = "${var.cf_api_email}",
+    cf_api_key = "${var.cf_api_key}",
+    cf_zone_id = "${var.cf_zone_id}",
+    cf_dns_record_id = "${var.cf_dns_record_id}",
+    cf_dns_record_content = "${yandex_compute_instance.vpn-server.network_interface[0].nat_ip_address}"
   }
 }
