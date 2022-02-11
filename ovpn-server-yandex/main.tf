@@ -106,13 +106,13 @@ resource "null_resource" "certificates" {
   }
 
   provisioner "file" {
-    source = "${path.module}/local/server.crt"
-    destination = "/home/${local.server_ssh_connection.user}/ansible-data/server.crt"
+    source = "${path.module}/local/vpn-ru.chere.one.crt"
+    destination = "/home/${local.server_ssh_connection.user}/ansible-data/vpn-ru.chere.one.crt"
   }
 
   provisioner "file" {
-    source = "${path.module}/local/server.key"
-    destination = "/home/${local.server_ssh_connection.user}/ansible-data/server.key"
+    source = "${path.module}/local/vpn-ru.chere.one.key"
+    destination = "/home/${local.server_ssh_connection.user}/ansible-data/vpn-ru.chere.one.key"
   }
 
   provisioner "file" {
@@ -129,8 +129,8 @@ module "ovpn_server_provision" {
   playbook = "${path.module}/provision/server_provision.yml"
   extra_vars = {
     ovpn_server_ca_cert  = "/home/${local.server_ssh_connection.user}/ansible-data/ca.crt"
-    ovpn_server_cert     = "/home/${local.server_ssh_connection.user}/ansible-data/server.crt"
-    ovpn_server_key      = "/home/${local.server_ssh_connection.user}/ansible-data/server.key"
+    ovpn_server_cert     = "/home/${local.server_ssh_connection.user}/ansible-data/vpn-ru.chere.one.crt"
+    ovpn_server_key      = "/home/${local.server_ssh_connection.user}/ansible-data/vpn-ru.chere.one.key"
     ovpn_server_ta_key   = "/home/${local.server_ssh_connection.user}/ansible-data/ta.key"
     ovpn_server_dns_name = "vpn-ru.chere.one"
     router_wan_if_mac_addr = "${yandex_compute_instance.vpn-server.network_interface[0].mac_address}"
