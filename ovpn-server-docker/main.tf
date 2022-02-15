@@ -100,25 +100,6 @@ locals {
   }
 }
 
-# TODO: Add router_wan_if_mac_addr parameter to router Ansible role and
-#       use docker_container.ovpn_server.ip_address
-# This external datasource example should go to notes after that
-# https://registry.terraform.io/providers/hashicorp/external/latest/docs/data-sources/data_source
-# [!] Even though the doc for external datasource states that "program must then
-#     produce a valid JSON object on stdout", it actually supports only limited
-#     subset of JSON (no arrays etc.). That's why jq is used here
-#     See:
-#     https://github.com/hashicorp/terraform/issues/12249
-#     https://github.com/hashicorp/terraform/issues/12256
-data "external" "server_mac" {
-  depends_on=[module.ovpn_server_user]
-
-  program = [
-    "bash", "-c",
-    "docker inspect -f '{{json .NetworkSettings.Networks.terraform_ovpn_network}}' terraform-docker-ovpn-server | jq  -j '{mac_addr: .MacAddress}'"
-  ]
-}
-
 module "ovpn_server_user" {
   source = "../modules/vagrant-user"
 
@@ -178,7 +159,7 @@ module "ovpn_server_provision" {
     ovpn_server_key      = "/home/vagrant/ansible-data/server.key"
     ovpn_server_ta_key   = "/home/vagrant/ansible-data/ta.key"
     ovpn_server_dns_name = "vpn.example.com"
-    router_wan_if_mac_addr = "${data.external.server_mac.result.mac_addr}"
+    router_wan_if_ip_addr = "${docker_container.ovpn_server.ip_address}"
     router_lan_if_name   = "tun0"
     router_allow_wan_ssh = true
   }
