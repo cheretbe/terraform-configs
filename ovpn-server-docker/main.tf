@@ -50,54 +50,65 @@ resource "docker_container" "ovpn_server" {
     "/run/lock" = "",
     "/tmp:exec" = ""
   }
-  devices { host_path = "/dev/net/tun" }
+  devices {
+    host_path      = "/dev/net/tun"
+    container_path = "/dev/net/tun"
+    permissions    = "rwm"
+  }
   capabilities {
     add = ["CAP_NET_ADMIN", "CAP_SYS_ADMIN"]
   }
 }
 
-# resource "docker_container" "foo2" {
-#   image = docker_image.ubuntu.latest
-#   name  = "terraform-docker-test-2"
-#   restart = "on-failure"
-#   # publish_all_ports = true
-#   command = [ "/usr/lib/systemd/systemd" ]
+resource "docker_container" "ansible_controller" {
+  image = docker_image.ubuntu.latest
+  name  = "ansible-controller"
+  restart = "on-failure"
+  # publish_all_ports = true
+  command = [ "/usr/lib/systemd/systemd" ]
 
-#   networks_advanced {
-#     name = "${docker_network.terraform_network.name}"
-#   }
+  networks_advanced {
+    name = "${docker_network.terraform_ovpn_network.name}"
+  }
 
-#   volumes {
-#     host_path      = "/sys/fs/cgroup"
-#     container_path = "/sys/fs/cgroup"
-#     read_only      = true
-#   }
-#   volumes {
-#     host_path      = "/sys/fs/fuse"
-#     container_path = "/sys/fs/fuse"
-#     read_only      = true
-#   }
-#   tmpfs = {
-#     "/run" = "",
-#     "/run/lock" = "",
-#     "/tmp:exec" = ""
-#   }
-# }
+  volumes {
+    host_path      = "/sys/fs/cgroup"
+    container_path = "/sys/fs/cgroup"
+    read_only      = true
+  }
+  volumes {
+    host_path      = "/sys/fs/fuse"
+    container_path = "/sys/fs/fuse"
+    read_only      = true
+  }
+  tmpfs = {
+    "/run" = "",
+    "/run/lock" = "",
+    "/tmp:exec" = ""
+  }
+}
 
 output "ovpn_server_ip" {
   value = "${docker_container.ovpn_server.ip_address}"
 }
 
-# output "IP2" {
-#   value = "${docker_container.foo2.ip_address}"
-# }
-
 locals {
+  ansible_controller_ssh_connection = {
+    host        = "${docker_container.ansible_controller.ip_address}"
+    user        = "vagrant"
+    private_key = file("~/.vagrant.d/insecure_private_key")
+  }
   server_ssh_connection = {
     host        = "${docker_container.ovpn_server.ip_address}"
     user        = "vagrant"
     private_key = file("~/.vagrant.d/insecure_private_key")
   }
+}
+
+module "ansible_controller_user" {
+  source = "../modules/vagrant-user"
+
+  container_name = "${docker_container.ansible_controller.name}"
 }
 
 module "ovpn_server_user" {
@@ -106,20 +117,14 @@ module "ovpn_server_user" {
   container_name = "${docker_container.ovpn_server.name}"
 }
 
-module "ovpn_server_ansible" {
-  source = "../modules/ansible-controller"
-
-  depends_on=[module.ovpn_server_user]
-  connection = local.server_ssh_connection
-}
-
-
 resource "null_resource" "certificates" {
+  depends_on=[module.ansible_controller_user, module.ovpn_server_user]
+
   connection {
     type        = "ssh"
-    host        = local.server_ssh_connection.host
-    user        = local.server_ssh_connection.user
-    private_key = local.server_ssh_connection.private_key
+    host        = local.ansible_controller_ssh_connection.host
+    user        = local.ansible_controller_ssh_connection.user
+    private_key = local.ansible_controller_ssh_connection.private_key
   }
 
   provisioner "remote-exec" {
@@ -148,10 +153,12 @@ resource "null_resource" "certificates" {
 }
 
 module "ovpn_server_provision" {
-  source = "../modules/ansible-local-provision"
+  source = "../modules/ansible-provision"
 
-  depends_on=[module.ovpn_server_ansible]
-  connection = local.server_ssh_connection
+  # depends_on=[module.ansible_controller_user, module.ovpn_server_user]
+  depends_on=[resource.null_resource.certificates]
+  controller_connection = local.ansible_controller_ssh_connection
+  server_connection = local.server_ssh_connection
   playbook = "${path.module}/provision/server_provision.yml"
   extra_vars = {
     ovpn_server_ca_cert  = "/home/vagrant/ansible-data/ca.crt"
