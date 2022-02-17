@@ -17,6 +17,7 @@ variable "cf_api_key" {}
 variable "cf_zone_id" {}
 variable "cf_dns_record_id" {}
 
+# https://registry.terraform.io/providers/yandex-cloud/yandex/latest/docs
 provider "yandex" {
   token     = var.yc_token
   cloud_id  = var.yc_cloud_id
@@ -30,13 +31,14 @@ resource "yandex_vpc_network" "terraform_network" {
 
 resource "yandex_vpc_subnet" "subnet_1" {
   name           = "subnet_1"
-  zone           = "ru-central1-a"
+  zone           = var.yc_zone
   network_id     = yandex_vpc_network.terraform_network.id
   v4_cidr_blocks = ["192.168.10.0/24"]
 }
 
 resource "yandex_compute_instance" "vpn-server" {
   name = "vpn-server"
+  labels = {}
   # https://cloud.yandex.ru/docs/compute/concepts/performance-levels
   platform_id = "standard-v3"
 
@@ -55,7 +57,8 @@ resource "yandex_compute_instance" "vpn-server" {
   boot_disk {
     initialize_params {
       # https://cloud.yandex.ru/marketplace/products/yc/ubuntu-20-04-lts
-      image_id = "fd8ba0ukgkn46r0qr1gi"
+      image_id = "fd8mfc6omiki5govl68h"
+      # type = "network-ssd"
       size = 5
     }
   }
@@ -74,7 +77,25 @@ output "external_ip_address" {
   value = yandex_compute_instance.vpn-server.network_interface[0].nat_ip_address
 }
 
+module "ansible_controller" {
+  source = "../modules/docker-ansible-controller"
+
+  # docker_network = docker_network.terraform_ovpn_network
+}
+
+module "ansible_controller_user" {
+  source = "../modules/vagrant-user"
+
+  depends_on=[module.ansible_controller]
+  container_name = module.ansible_controller.container.name
+}
+
 locals {
+  ansible_controller_ssh_connection = {
+    host        = module.ansible_controller.container.ip_address
+    user        = "vagrant"
+    private_key = file("~/.vagrant.d/insecure_private_key")
+  }
   server_ssh_connection = {
     host        = "${yandex_compute_instance.vpn-server.network_interface[0].nat_ip_address}"
     user        = "ubuntu"
@@ -82,56 +103,64 @@ locals {
   }
 }
 
-module "ovpn_server_ansible" {
-  source = "../modules/ansible-controller"
+module "ansible_controller_provision" {
+  source = "../modules/ansible-local-provision"
 
-  connection = local.server_ssh_connection
+  depends_on=[module.ansible_controller_user]
+  connection = local.ansible_controller_ssh_connection
+  ansible_playbook_exe = "ansible-playbook"
+  playbook = "${path.module}/provision/controller_provision.yml"
 }
 
 resource "null_resource" "certificates" {
   connection {
     type        = "ssh"
-    host        = local.server_ssh_connection.host
-    user        = local.server_ssh_connection.user
-    private_key = local.server_ssh_connection.private_key
+    host        = local.ansible_controller_ssh_connection.host
+    user        = local.ansible_controller_ssh_connection.user
+    private_key = local.ansible_controller_ssh_connection.private_key
   }
 
   provisioner "remote-exec" {
-    inline = ["mkdir -p /home/${local.server_ssh_connection.user}/ansible-data"]
+    inline = ["mkdir -p /home/${local.ansible_controller_ssh_connection.user}/ansible-data"]
   }
 
   provisioner "file" {
     source = "${path.module}/local/ca.crt"
-    destination = "/home/${local.server_ssh_connection.user}/ansible-data/ca.crt"
+    destination = "/home/${local.ansible_controller_ssh_connection.user}/ansible-data/ca.crt"
   }
 
   provisioner "file" {
     source = "${path.module}/local/vpn-ru.chere.one.crt"
-    destination = "/home/${local.server_ssh_connection.user}/ansible-data/vpn-ru.chere.one.crt"
+    destination = "/home/${local.ansible_controller_ssh_connection.user}/ansible-data/vpn-ru.chere.one.crt"
   }
 
   provisioner "file" {
     source = "${path.module}/local/vpn-ru.chere.one.key"
-    destination = "/home/${local.server_ssh_connection.user}/ansible-data/vpn-ru.chere.one.key"
+    destination = "/home/${local.ansible_controller_ssh_connection.user}/ansible-data/vpn-ru.chere.one.key"
   }
 
   provisioner "file" {
     source = "${path.module}/local/ta.key"
-    destination = "/home/${local.server_ssh_connection.user}/ansible-data/ta.key"
+    destination = "/home/${local.ansible_controller_ssh_connection.user}/ansible-data/ta.key"
   }
 }
 
 module "ovpn_server_provision" {
-  source = "../modules/ansible-local-provision"
+  source = "../modules/ansible-provision"
 
-  depends_on=[module.ovpn_server_ansible]
-  connection = local.server_ssh_connection
+  depends_on = [
+    resource.yandex_compute_instance.vpn-server,
+    module.ansible_controller_provision,
+    resource.null_resource.certificates
+  ]
+  controller_connection = local.ansible_controller_ssh_connection
+  server_connection = local.server_ssh_connection
   playbook = "${path.module}/provision/server_provision.yml"
   extra_vars = {
-    ovpn_server_ca_cert  = "/home/${local.server_ssh_connection.user}/ansible-data/ca.crt"
-    ovpn_server_cert     = "/home/${local.server_ssh_connection.user}/ansible-data/vpn-ru.chere.one.crt"
-    ovpn_server_key      = "/home/${local.server_ssh_connection.user}/ansible-data/vpn-ru.chere.one.key"
-    ovpn_server_ta_key   = "/home/${local.server_ssh_connection.user}/ansible-data/ta.key"
+    ovpn_server_ca_cert  = "/home/${local.ansible_controller_ssh_connection.user}/ansible-data/ca.crt"
+    ovpn_server_cert     = "/home/${local.ansible_controller_ssh_connection.user}/ansible-data/vpn-ru.chere.one.crt"
+    ovpn_server_key      = "/home/${local.ansible_controller_ssh_connection.user}/ansible-data/vpn-ru.chere.one.key"
+    ovpn_server_ta_key   = "/home/${local.ansible_controller_ssh_connection.user}/ansible-data/ta.key"
     ovpn_server_dns_name = "vpn-ru.chere.one"
     router_wan_if_mac_addr = "${yandex_compute_instance.vpn-server.network_interface[0].mac_address}"
     router_lan_if_name   = "tun0"
