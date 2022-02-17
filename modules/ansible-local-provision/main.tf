@@ -1,5 +1,6 @@
 locals {
   playbook_name = "/tmp/vagrant-provision/${basename(var.playbook)}"
+  ansible_playbook_exe = var.ansible_playbook_exe == null ? "/home/${var.connection.user}/.cache/venv/ansible/bin/ansible-playbook" : var.ansible_playbook_exe
 }
 
 resource "null_resource" "ansible-local-provision" {
@@ -27,7 +28,7 @@ resource "null_resource" "ansible-local-provision" {
   provisioner "remote-exec" {
     inline = [
       join("", [
-        "/home/${var.connection.user}/.cache/venv/ansible/bin/ansible-playbook ",
+        "${local.ansible_playbook_exe} ",
         " -i localhost, -c local --extra-vars @/tmp/vagrant-provision/vars_file.yml ",
         "${local.playbook_name}"
       ])

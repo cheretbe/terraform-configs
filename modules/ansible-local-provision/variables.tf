@@ -2,6 +2,10 @@ variable "connection" {
   default = {}
 }
 
+variable "ansible_playbook_exe" {
+  default = null
+}
+
 variable "playbook" {
   default = ""
 }
