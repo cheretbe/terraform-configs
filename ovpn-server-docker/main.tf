@@ -60,41 +60,32 @@ resource "docker_container" "ovpn_server" {
   }
 }
 
-resource "docker_container" "ansible_controller" {
-  image = docker_image.ubuntu.latest
-  name  = "ansible-controller"
-  restart = "on-failure"
-  # publish_all_ports = true
-  command = [ "/usr/lib/systemd/systemd" ]
-
-  networks_advanced {
-    name = "${docker_network.terraform_ovpn_network.name}"
-  }
-
-  volumes {
-    host_path      = "/sys/fs/cgroup"
-    container_path = "/sys/fs/cgroup"
-    read_only      = true
-  }
-  volumes {
-    host_path      = "/sys/fs/fuse"
-    container_path = "/sys/fs/fuse"
-    read_only      = true
-  }
-  tmpfs = {
-    "/run" = "",
-    "/run/lock" = "",
-    "/tmp:exec" = ""
-  }
-}
-
 output "ovpn_server_ip" {
   value = "${docker_container.ovpn_server.ip_address}"
 }
 
+module "ansible_controller" {
+  source = "../modules/docker-ansible-controller"
+
+  docker_network = docker_network.terraform_ovpn_network
+}
+
+module "ansible_controller_user" {
+  source = "../modules/vagrant-user"
+
+  depends_on=[module.ansible_controller]
+  container_name = module.ansible_controller.container.name
+}
+
+module "ovpn_server_user" {
+  source = "../modules/vagrant-user"
+
+  container_name = docker_container.ovpn_server.name
+}
+
 locals {
   ansible_controller_ssh_connection = {
-    host        = "${docker_container.ansible_controller.ip_address}"
+    host        = module.ansible_controller.container.ip_address
     user        = "vagrant"
     private_key = file("~/.vagrant.d/insecure_private_key")
   }
@@ -105,16 +96,13 @@ locals {
   }
 }
 
-module "ansible_controller_user" {
-  source = "../modules/vagrant-user"
+module "ansible_controller_provision" {
+  source = "../modules/ansible-local-provision"
 
-  container_name = "${docker_container.ansible_controller.name}"
-}
-
-module "ovpn_server_user" {
-  source = "../modules/vagrant-user"
-
-  container_name = "${docker_container.ovpn_server.name}"
+  depends_on=[module.ansible_controller_user]
+  connection = local.ansible_controller_ssh_connection
+  ansible_playbook_exe = "ansible-playbook"
+  playbook = "${path.module}/provision/controller_provision.yml"
 }
 
 resource "null_resource" "certificates" {
@@ -155,8 +143,7 @@ resource "null_resource" "certificates" {
 module "ovpn_server_provision" {
   source = "../modules/ansible-provision"
 
-  # depends_on=[module.ansible_controller_user, module.ovpn_server_user]
-  depends_on=[resource.null_resource.certificates]
+  depends_on=[module.ansible_controller_provision, resource.null_resource.certificates]
   controller_connection = local.ansible_controller_ssh_connection
   server_connection = local.server_ssh_connection
   playbook = "${path.module}/provision/server_provision.yml"
