@@ -145,11 +145,25 @@ resource "null_resource" "certificates" {
   }
 }
 
+resource "null_resource" "wait_for_server_ssh" {
+  connection {
+    type        = "ssh"
+    host        = local.server_ssh_connection.host
+    user        = local.server_ssh_connection.user
+    private_key = local.server_ssh_connection.private_key
+  }
+
+  provisioner "remote-exec" {
+    inline = ["uname -a"]
+  }
+}
+
 module "ovpn_server_provision" {
   source = "../modules/ansible-provision"
 
+  # count = 0
   depends_on = [
-    resource.yandex_compute_instance.vpn-server,
+  resource.null_resource.wait_for_server_ssh,
     module.ansible_controller_provision,
     resource.null_resource.certificates
   ]
