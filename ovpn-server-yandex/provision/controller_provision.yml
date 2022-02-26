@@ -4,7 +4,8 @@
 
   tasks:
     - name: Checkout shared playbooks repo
-      git:
+      ansible.builtin.git:
         repo: "https://github.com/cheretbe/ansible-playbooks.git"
+        version: master
         dest: "/opt/ansible-playbooks"
       become: true
