@@ -42,12 +42,14 @@ resource "yandex_compute_instance" "vpn-server" {
   # https://cloud.yandex.ru/docs/compute/concepts/performance-levels
   platform_id = "standard-v3"
 
+  # Preemtible, 2 cores, 100% vCPU, 2Gb memory: 705,80 ₽/month
+  # Preemtible, 2 cores, 50% vCPU, 1Gb memory:  525,80 ₽ ₽/month
   resources {
     cores  = 2
-    # memory = 1
-    memory = 2
-    # core_fraction = 50
-    core_fraction = 100
+    memory = 1
+    # memory = 2
+    core_fraction = 50
+    # core_fraction = 100
   }
 
   scheduling_policy {
