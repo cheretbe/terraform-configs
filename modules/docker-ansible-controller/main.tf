@@ -3,7 +3,7 @@ terraform {
     # https://registry.terraform.io/providers/kreuzwerker/docker/latest
     docker = {
       source  = "kreuzwerker/docker"
-      version = "2.15.0"
+      # version = "2.20.0"
     }
   }
 }
@@ -12,10 +12,13 @@ provider "docker" {
   host = "unix:///var/run/docker.sock"
 }
 
-# Pulls the image
-resource "docker_image" "ubuntu" {
-  name = "geerlingguy/docker-ubuntu2004-ansible"
-  keep_locally = true
+resource "docker_image" "ubuntu_ansible" {
+  name = "ubuntu_ansible"
+  build {
+    path = "${path.module}"
+    tag  = ["ubuntu_ansible:latest"]
+  }
+  force_remove = true
 }
 
 resource "docker_network" "ansible_controller_network" {
@@ -26,10 +29,11 @@ resource "docker_network" "ansible_controller_network" {
 }
 
 resource "docker_container" "ansible_controller" {
-  image = docker_image.ubuntu.latest
+  image = docker_image.ubuntu_ansible.latest
   name  = "ansible-controller"
   restart = "on-failure"
-  command = [ "/usr/lib/systemd/systemd" ]
+  # https://stackoverflow.com/questions/21553353/what-is-the-difference-between-cmd-and-entrypoint-in-a-dockerfile
+  command = [ "/entry_point_command.sh" ]
 
   networks_advanced {
     name = var.docker_network == null ? docker_network.ansible_controller_network[0].name : var.docker_network.name
