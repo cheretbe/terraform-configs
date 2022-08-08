@@ -2,17 +2,11 @@
 
 set -euo pipefail
 
-apt-get update -y
-DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-  curl wget git openssh-server
-
 if ! id "vagrant" &>/dev/null; then
   # https://en.wikipedia.org/wiki/Gecos_field
   adduser --disabled-password --gecos "" vagrant
   echo vagrant:vagrant | chpasswd
 fi
-
-systemctl start sshd
 
 mkdir -p /home/vagrant/.ssh
 chown vagrant:vagrant /home/vagrant/.ssh
