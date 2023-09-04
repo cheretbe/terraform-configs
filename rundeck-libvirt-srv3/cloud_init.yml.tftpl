@@ -1,0 +1,25 @@
+#cloud-config
+
+packages:
+- qemu-guest-agent
+runcmd:
+  - [ systemctl, enable, qemu-guest-agent.service ]
+  - [ systemctl, start, qemu-guest-agent.service ]
+users:
+# We don't need default 'ubuntu' user
+# - default
+# https://cloudinit.readthedocs.io/en/latest/reference/examples.html
+%{ for user_name,user_data in vm_users ~}
+  - name: ${user_name}
+    sudo: ALL=(ALL) NOPASSWD:ALL
+    groups: users, admin, sudoers
+    shell: /bin/bash
+    %{ if "${user_data.password}" != null ~}
+    # mkpasswd -m sha512crypt
+    passwd: ${user_data.password}
+    lock_passwd: false
+    %{ endif ~}
+ssh_authorized_keys:
+      - ${user_data.ssh_key}
+%{ endfor }
+final_message: "The system is up after $UPTIME seconds"
