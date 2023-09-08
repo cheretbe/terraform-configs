@@ -6,15 +6,15 @@ terraform {
       version = "0.7.1"
     }
   }
-  backend "local" {
-    # The path is configured in 'backend.tfvars' and initialized like that:
-    # terraform init -backend-config=backend.tfvars
-  }
 }
 
 variable "libvirt_ssh_user_name" {
 }
+variable "libvirt_local" {
+  default = true
+}
 variable "libvirt_host" {
+  default = ""
 }
 variable "vm_users" {
 }
@@ -44,7 +44,7 @@ variable "libvirt_ssh_private_key" {
 }
 
 provider "libvirt" {
-  uri = "qemu+ssh://${var.libvirt_ssh_user_name}@${var.libvirt_host}/system?keyfile=${var.libvirt_ssh_private_key}"
+  uri = var.libvirt_local ? "qemu:///system" : "qemu+ssh://${var.libvirt_ssh_user_name}@${var.libvirt_host}/system?keyfile=${var.libvirt_ssh_private_key}"
 }
 
 # If image creation fails with "Could not open '/mnt/hdd1/vm/rundeck': Permission denied" error:
