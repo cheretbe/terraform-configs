@@ -57,6 +57,8 @@ provider "libvirt" {
 #   pool = var.libvirt_pool_name
 #   source = var.libvirt_image_url
 #   format = "qcow2"
+#   # 15 GiB
+#   size = 16106127360
 # }
 
 # Use this when debugging to speed up volume creation
@@ -65,6 +67,8 @@ resource "libvirt_volume" "rundeck_qcow2" {
   pool = var.libvirt_pool_name
   base_volume_pool = "images"
   base_volume_name = "jammy-server-cloudimg-amd64.img"
+  # 15 GiB
+  size = 16106127360
 }
 
 # locals {
